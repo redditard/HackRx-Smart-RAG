@@ -5,6 +5,8 @@ from typing import List
 import os
 import io
 import logging
+import argparse
+import sys
 from dotenv import load_dotenv
 import requests
 import pypdf
@@ -17,14 +19,33 @@ import numpy as np
 # Load environment variables
 load_dotenv()
 
+# Parse command line arguments
+def parse_args():
+    parser = argparse.ArgumentParser(description='LLM Document Processing System')
+    parser.add_argument('--model', choices=['gemini', 'local'], 
+                       default=os.getenv('DEFAULT_MODEL_TYPE', 'gemini'),
+                       help='Choose the LLM model: gemini or local (default: gemini)')
+    return parser.parse_args()
+
+# Initialize based on command line args (if called directly)
+args = None
+if __name__ == "__main__":
+    args = parse_args()
+    MODEL_TYPE = args.model
+else:
+    # When imported as a module, use environment variable or default
+    MODEL_TYPE = os.getenv('DEFAULT_MODEL_TYPE', 'gemini')
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+logger.info(f"Starting server with {MODEL_TYPE.upper()} model")
+
 # Initialize FastAPI app
 app = FastAPI(
-    title="LLM Document Processing System (Gemini)",
-    description="Intelligent query-retrieval system for processing documents using Google Gemini",
+    title=f"LLM Document Processing System ({MODEL_TYPE.title()})",
+    description=f"Intelligent query-retrieval system using {MODEL_TYPE.title()} for document processing",
     version="1.0.0"
 )
 
@@ -38,14 +59,58 @@ PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_ENVIRONMENT = os.getenv("PINECONE_ENVIRONMENT", "us-east-1-aws")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "hackrx-documents")
 
-# Initialize clients
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    # Initialize Gemini model
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    logger.warning("GEMINI_API_KEY not found in environment variables")
-    gemini_model = None
+# Local LLM configuration
+LOCAL_LLM_ENDPOINT = os.getenv("LOCAL_LLM_ENDPOINT", "http://localhost:1234/v1/chat/completions")
+LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF")
+LOCAL_LLM_TIMEOUT = int(os.getenv("LOCAL_LLM_TIMEOUT", "120"))
+
+# Initialize clients based on model type
+gemini_model = None
+local_llm_available = False
+
+if MODEL_TYPE == 'gemini':
+    if GEMINI_API_KEY:
+        try:
+            genai.configure(api_key=GEMINI_API_KEY)
+            gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+            logger.info("Gemini model initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Gemini model: {e}")
+    else:
+        logger.warning("GEMINI_API_KEY not found in environment variables")
+elif MODEL_TYPE == 'local':
+    # Test local LLM availability (LM Studio - OpenAI compatible)
+    try:
+        # For LM Studio, check the models endpoint
+        models_endpoint = LOCAL_LLM_ENDPOINT.replace('/chat/completions', '/models')
+        response = requests.get(models_endpoint, timeout=5)
+        if response.status_code == 200:
+            local_llm_available = True
+            logger.info(f"LM Studio endpoint available at {LOCAL_LLM_ENDPOINT}")
+            # Try to get available models
+            try:
+                models_data = response.json()
+                if 'data' in models_data and len(models_data['data']) > 0:
+                    available_models = [model['id'] for model in models_data['data']]
+                    logger.info(f"Available models: {available_models}")
+                else:
+                    logger.warning("No models loaded in LM Studio")
+            except:
+                logger.info("Connected to LM Studio but couldn't parse models list")
+        else:
+            logger.error(f"LM Studio endpoint returned status {response.status_code}")
+    except Exception as e:
+        logger.error(f"Failed to connect to LM Studio at {LOCAL_LLM_ENDPOINT}: {e}")
+        logger.warning("LM Studio not available, falling back to Gemini if configured")
+        # Fallback to Gemini if local LLM is not available
+        if GEMINI_API_KEY:
+            try:
+                genai.configure(api_key=GEMINI_API_KEY)
+                gemini_model = genai.GenerativeModel('gemini-2.5-flash-lite')
+                MODEL_TYPE = 'gemini'
+                logger.info("Fallback: Gemini model initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize fallback Gemini model: {e}")
 
 # Initialize embedding model (using sentence-transformers for free embeddings)
 try:
@@ -232,12 +297,56 @@ def retrieve_relevant_chunks(question: str, top_k: int = 5) -> str:
         logger.error(f"Error retrieving chunks: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve relevant information: {str(e)}")
 
-def generate_answer(context: str, question: str) -> str:
-    """Generate an answer using Gemini based on the context."""
+def call_local_llm(prompt: str) -> str:
+    """Call LM Studio (OpenAI-compatible) endpoint to generate response."""
     try:
-        if gemini_model is None:
-            raise Exception("Gemini model not initialized")
+        # LM Studio uses OpenAI-compatible API format
+        payload = {
+            "model": LOCAL_LLM_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "stream": False
+        }
         
+        headers = {
+            "Content-Type": "application/json",
+            # LM Studio doesn't require API key for local usage
+            # but we include it in case it's configured
+        }
+        
+        response = requests.post(
+            LOCAL_LLM_ENDPOINT,
+            json=payload,
+            timeout=LOCAL_LLM_TIMEOUT,
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            # Extract response from OpenAI-compatible format
+            if 'choices' in result and len(result['choices']) > 0:
+                content = result['choices'][0]['message']['content']
+                return content.strip()
+            else:
+                logger.error("Invalid response format from LM Studio")
+                return None
+        else:
+            logger.error(f"LM Studio returned status {response.status_code}: {response.text}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error calling LM Studio: {e}")
+        return None
+
+def generate_answer(context: str, question: str) -> str:
+    """Generate an answer using the selected LLM based on the context."""
+    try:
         prompt = f"""You are a helpful assistant for answering questions based on a provided document.
 Your task is to answer the user's question accurately and concisely based ONLY on the context below.
 Do not use any external knowledge. If the information is not present in the context, you must state "The provided document does not contain information on this topic."
@@ -253,14 +362,31 @@ QUESTION: {question}
 
 ANSWER:"""
 
-        response = gemini_model.generate_content(prompt)
-        
-        if response.text:
-            answer = response.text.strip()
+        if MODEL_TYPE == 'gemini' and gemini_model is not None:
+            # Use Gemini
+            response = gemini_model.generate_content(prompt)
+            if response.text:
+                answer = response.text.strip()
+            else:
+                answer = "I was unable to generate an answer based on the provided context."
+        elif MODEL_TYPE == 'local' and local_llm_available:
+            # Use local LLM (LM Studio)
+            answer = call_local_llm(prompt)
+            if answer is None:
+                answer = "I was unable to generate an answer using LM Studio."
         else:
-            answer = "I was unable to generate an answer based on the provided context."
+            # Fallback
+            if gemini_model is not None:
+                logger.info("Using Gemini as fallback")
+                response = gemini_model.generate_content(prompt)
+                if response.text:
+                    answer = response.text.strip()
+                else:
+                    answer = "I was unable to generate an answer based on the provided context."
+            else:
+                raise Exception("No LLM model available")
         
-        logger.info(f"Generated answer for question: {question[:50]}...")
+        logger.info(f"Generated answer using {MODEL_TYPE} model for question: {question[:50]}...")
         return answer
         
     except Exception as e:
@@ -272,11 +398,13 @@ ANSWER:"""
 async def root():
     """Root endpoint with basic information."""
     return {
-        "message": "LLM Document Processing System (Gemini)",
+        "message": f"LLM Document Processing System ({MODEL_TYPE.title()})",
         "version": "1.0.0",
+        "model_type": MODEL_TYPE,
         "endpoints": {
             "main": "/hackrx/run",
-            "docs": "/docs"
+            "docs": "/docs",
+            "health": "/health"
         }
     }
 
@@ -333,11 +461,38 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
+        "model_type": MODEL_TYPE,
         "gemini_configured": bool(GEMINI_API_KEY),
+        "gemini_available": gemini_model is not None,
+        "local_llm_configured": bool(LOCAL_LLM_ENDPOINT),
+        "local_llm_available": local_llm_available,
+        "lm_studio_endpoint": LOCAL_LLM_ENDPOINT if MODEL_TYPE == 'local' else None,
+        "lm_studio_model": LOCAL_LLM_MODEL if MODEL_TYPE == 'local' else None,
         "pinecone_configured": bool(PINECONE_API_KEY),
         "embedding_model_loaded": embedding_model is not None
     }
 
 if __name__ == "__main__":
     import uvicorn
+    
+    # Parse arguments again for the main execution
+    args = parse_args()
+    
+    print(f"\n🚀 Starting LLM Document Processing System")
+    print(f"📋 Model: {args.model.upper()}")
+    
+    if args.model == 'gemini':
+        print(f"🤖 Using Google Gemini (gemini-1.5-flash)")
+        if not GEMINI_API_KEY:
+            print("⚠️  Warning: GEMINI_API_KEY not found in environment")
+    elif args.model == 'local':
+        print(f"🏠 Using LM Studio at: {LOCAL_LLM_ENDPOINT}")
+        print(f"📦 Model: {LOCAL_LLM_MODEL}")
+        print(f"⏱️  Timeout: {LOCAL_LLM_TIMEOUT}s")
+        print("📋 Make sure LM Studio is running with a model loaded")
+    
+    print(f"🌐 Server will be available at: http://0.0.0.0:8000")
+    print(f"📖 API docs at: http://0.0.0.0:8000/docs")
+    print(f"❤️  Health check at: http://0.0.0.0:8000/health\n")
+    
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,6 +1,6 @@
-# LLM Document Processing System (Gemini)
+# LLM Document Processing System
 
-This is an intelligent query-retrieval system that processes natural language queries and retrieves relevant information from large unstructured documents using Google Gemini and free embedding models.
+This is an intelligent query-retrieval system that processes natural language queries and retrieves relevant information from large unstructured documents using **Google Gemini** or **Local LLM models** with free embedding models.
 
 ## Features
 
@@ -8,7 +8,22 @@ This is an intelligent query-retrieval system that processes natural language qu
 - Semantic text chunking and embedding using SentenceTransformers
 - Vector storage using Pinecone
 - Intelligent query retrieval using RAG (Retrieval-Augmented Generation)
-- Natural language answering using Google Gemini
+- **Dual LLM Support**: Choose between Google Gemini or Local LLM (e.g., Ollama)
+- Natural language answering with configurable models
+
+## Model Options
+
+### 🤖 Google Gemini
+- Uses Google's Gemini-1.5-flash model
+- Requires GEMINI_API_KEY
+- Cloud-based, fast responses
+- High-quality natural language generation
+
+### 🏠 Local LLM
+- Supports local LLM servers with OpenAI-compatible APIs (LM Studio, Ollama, etc.)
+- No external API required
+- Complete privacy and control
+- Configurable endpoint and model
 
 ## Setup Instructions
 
@@ -33,14 +48,43 @@ This is an intelligent query-retrieval system that processes natural language qu
 4. **Set up environment variables:**
    - Copy `.env.example` to `.env`
    - Fill in your API keys:
-     - `GEMINI_API_KEY`: Your Google AI API key
+     - `GEMINI_API_KEY`: Your Google AI API key (for Gemini model)
      - `PINECONE_API_KEY`: Your Pinecone API key
      - `PINECONE_ENVIRONMENT`: Your Pinecone environment (e.g., "us-east-1-aws")
      - `PINECONE_INDEX_NAME`: Name for your Pinecone index
+     - `LOCAL_LLM_ENDPOINT`: Your LM Studio endpoint (e.g., "http://localhost:1234/v1/chat/completions")
+     - `LOCAL_LLM_MODEL`: Your LM Studio model name (e.g., "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF")
 
 5. **Run the application:**
+
+   **Option 1: Using the startup script (Recommended)**
    ```bash
+   # For Google Gemini
+   python run_server.py --model gemini
+   
+   # For Local LLM (e.g., Ollama)
+   python run_server.py --model local
+   
+   # With custom host/port
+   python run_server.py --model gemini --host 0.0.0.0 --port 8080 --reload
+   ```
+
+   **Option 2: Direct uvicorn command**
+   ```bash
+   # For Gemini (default)
    uvicorn main:app --reload
+   
+   # For Local LLM (set environment variable first)
+   DEFAULT_MODEL_TYPE=local uvicorn main:app --reload
+   ```
+
+   **Option 3: Direct Python execution**
+   ```bash
+   # For Gemini
+   python main.py --model gemini
+   
+   # For Local LLM
+   python main.py --model local
    ```
 
 6. **Access the API:**
