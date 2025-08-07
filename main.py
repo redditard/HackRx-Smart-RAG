@@ -737,7 +737,7 @@ def embed_and_store(chunks: List[str], document_id: str):
     """Synchronous wrapper for async embed and store."""
     return asyncio.run(embed_and_store_async(chunks, document_id))
 
-async def retrieve_relevant_chunks_async(question: str, top_k: int = None, document_id: str = None) -> str:
+async def retrieve_relevant_chunks_async(question: str, top_k: int = None) -> str:
     """Retrieve relevant text chunks with optimized async processing and better relevance filtering."""
     try:
         # Use configured top_k or parameter (increased to 20 for maximum accuracy and comprehensive coverage)
@@ -754,22 +754,14 @@ async def retrieve_relevant_chunks_async(question: str, top_k: int = None, docum
         question_embedding = await get_embeddings_async([question])
         question_vector = question_embedding[0]
         
-        # Prepare metadata filter to prevent context contamination
-        metadata_filter = None
-        if document_id:
-            doc_hash = get_document_hash(document_id)
-            metadata_filter = {"doc_hash": {"$eq": doc_hash}}
-            logger.info(f"Using metadata filter for document: {doc_hash}")
-        
-        # Query Pinecone with optimized parameters and metadata filtering
+        # Query Pinecone with optimized parameters
         query_response = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: index.query(
                 vector=question_vector,
                 top_k=actual_top_k,
                 include_metadata=True,
-                include_values=False,  # Don't return vectors to save bandwidth
-                filter=metadata_filter  # Prevent context contamination between documents
+                include_values=False  # Don't return vectors to save bandwidth
             )
         )
         
@@ -808,9 +800,9 @@ async def retrieve_relevant_chunks_async(question: str, top_k: int = None, docum
         logger.error(f"Error retrieving chunks: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve relevant information: {str(e)}")
 
-def retrieve_relevant_chunks(question: str, top_k: int = 20, document_id: str = None) -> str:
+def retrieve_relevant_chunks(question: str, top_k: int = 20) -> str:
     """Synchronous wrapper for async retrieval."""
-    return asyncio.run(retrieve_relevant_chunks_async(question, top_k, document_id))
+    return asyncio.run(retrieve_relevant_chunks_async(question, top_k))
 
 async def call_local_llm_async(prompt: str) -> str:
     """Call LM Studio (OpenAI-compatible) endpoint asynchronously."""
@@ -1034,8 +1026,8 @@ async def run_query(request: QueryRequest, background_tasks: BackgroundTasks):
             try:
                 logger.info(f"❓ Processing question {index + 1}/{len(request.questions)}")
                 
-                # Use optimized retrieval with relevance filtering and metadata filtering to prevent context contamination
-                context = await retrieve_relevant_chunks_async(question, top_k=RETRIEVAL_TOP_K, document_id=url)
+                # Use optimized retrieval with relevance filtering
+                context = await retrieve_relevant_chunks_async(question, top_k=RETRIEVAL_TOP_K)
                 
                 if not context.strip() or "No highly relevant information" in context:
                     return "No relevant information found in the document for this question."
