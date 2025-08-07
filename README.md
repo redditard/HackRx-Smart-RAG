@@ -1,6 +1,6 @@
 # LLM Document Processing System
 
-This is an intelligent query-retrieval system that processes natural language queries and retrieves relevant information from large unstructured documents using **Google Gemini** or **Local LLM models** with free embedding models.
+This is an intelligent query-retrieval system that processes natural language queries and retrieves relevant information from large unstructured documents using **Google Gemini**, **Local LLM models**, or **Together AI** with free embedding models.
 
 ## Features
 
@@ -8,7 +8,7 @@ This is an intelligent query-retrieval system that processes natural language qu
 - Semantic text chunking and embedding using SentenceTransformers
 - Vector storage using Pinecone
 - Intelligent query retrieval using RAG (Retrieval-Augmented Generation)
-- **Dual LLM Support**: Choose between Google Gemini or Local LLM (e.g., Ollama)
+- **Triple LLM Support**: Choose between Google Gemini, Local LLM (e.g., LM Studio), or Together AI
 - Natural language answering with configurable models
 
 ## Model Options
@@ -24,6 +24,12 @@ This is an intelligent query-retrieval system that processes natural language qu
 - No external API required
 - Complete privacy and control
 - Configurable endpoint and model
+
+### 🌐 Together AI
+- Cloud-based inference with fast, scalable AI models
+- Access to popular open-source models (Llama, Mistral, etc.)
+- Competitive pricing and reliable service
+- No local setup required
 
 ## Setup Instructions
 
@@ -54,6 +60,8 @@ This is an intelligent query-retrieval system that processes natural language qu
      - `PINECONE_INDEX_NAME`: Name for your Pinecone index
      - `LOCAL_LLM_ENDPOINT`: Your LM Studio endpoint (e.g., "http://localhost:1234/v1/chat/completions")
      - `LOCAL_LLM_MODEL`: Your LM Studio model name (e.g., "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF")
+     - `TOGETHER_API_KEY`: Your Together AI API key (for Together AI model)
+     - `TOGETHER_MODEL`: Together AI model name (e.g., "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo")
 
 5. **Run the application:**
 
@@ -62,8 +70,11 @@ This is an intelligent query-retrieval system that processes natural language qu
    # For Google Gemini
    python run_server.py --model gemini
    
-   # For Local LLM (e.g., Ollama)
+   # For Local LLM (e.g., LM Studio)
    python run_server.py --model local
+   
+   # For Together AI
+   python run_server.py --model together
    
    # With custom host/port
    python run_server.py --model gemini --host 0.0.0.0 --port 8080 --reload
@@ -85,6 +96,9 @@ This is an intelligent query-retrieval system that processes natural language qu
    
    # For Local LLM
    python main.py --model local
+   
+   # For Together AI
+   python main.py --model together
    ```
 
 6. **Access the API:**

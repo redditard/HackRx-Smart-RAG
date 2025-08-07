@@ -1,16 +1,16 @@
 # Configuration settings for the LLM Document Processing System (Gemini)
 
 # Gemini Settings
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # SentenceTransformers model
 
 # Text Processing Settings
-CHUNK_SIZE = 1000
+CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 
 # Retrieval Settings
-TOP_K_CHUNKS = 5
-MIN_RELEVANCE_SCORE = 0.7
+TOP_K_CHUNKS = 20  # Maximum possible for comprehensive coverage
+MIN_RELEVANCE_SCORE = 0.25  # Very inclusive for maximum information capture
 
 # Pinecone Settings
 VECTOR_DIMENSION = 384  # all-MiniLM-L6-v2 dimension
@@ -20,18 +20,11 @@ SIMILARITY_METRIC = "cosine"
 REQUEST_TIMEOUT = 30
 MAX_PDF_SIZE_MB = 50
 
-# Prompt Templates
-SYSTEM_PROMPT = """You are a helpful assistant for answering questions based on a provided document.
-Your task is to answer the user's question accurately and concisely based ONLY on the context below.
-Do not use any external knowledge. If the information is not present in the context, you must state "The provided document does not contain information on this topic."
+# Enhanced Prompt Templates for Insurance/Policy Questions
+SYSTEM_PROMPT = """Answer policy questions directly and briefly. When asked about specific plans, use the general policy terms if plan-specific details aren't available. Start with "Yes" or "No" for yes/no questions."""
 
-Be specific and reference relevant details from the document when possible."""
+ANSWER_PROMPT_TEMPLATE = """Context: {context}
 
-ANSWER_PROMPT_TEMPLATE = """CONTEXT:
----
-{context}
----
+Question: {question}
 
-QUESTION: {question}
-
-ANSWER:"""
+Answer briefly in 1 sentence with key details only (amounts, conditions). Don't over-explain:"""

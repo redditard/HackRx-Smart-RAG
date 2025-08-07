@@ -2,8 +2,9 @@
 """
 Startup script for LLM Document Processing System
 Usage:
-    python run_server.py --model gemini    # Use Google Gemini
-    python run_server.py --model local     # Use Local LLM (e.g., Ollama)
+    python run_server.py --model gemini     # Use Google Gemini
+    python run_server.py --model local      # Use Local LLM (e.g., LM Studio)
+    python run_server.py --model together   # Use Together AI
 """
 
 import argparse
@@ -16,9 +17,9 @@ load_dotenv()
 
 def main():
     parser = argparse.ArgumentParser(description='LLM Document Processing System Launcher')
-    parser.add_argument('--model', choices=['gemini', 'local'], 
+    parser.add_argument('--model', choices=['gemini', 'local', 'together'], 
                        default=os.getenv('DEFAULT_MODEL_TYPE', 'gemini'),
-                       help='Choose the LLM model: gemini or local (default: gemini)')
+                       help='Choose the LLM model: gemini, local, or together (default: gemini)')
     parser.add_argument('--host', default='0.0.0.0', help='Host to bind to (default: 0.0.0.0)')
     parser.add_argument('--port', type=int, default=8000, help='Port to bind to (default: 8000)')
     parser.add_argument('--reload', action='store_true', help='Enable auto-reload for development')
@@ -47,6 +48,16 @@ def main():
         print(f"🏠 LM Studio Endpoint: {local_endpoint}")
         print(f"📦 LM Studio Model: {local_model}")
         print("   Make sure LM Studio is running with a model loaded")
+    
+    elif args.model == 'together':
+        together_key = os.getenv('TOGETHER_API_KEY')
+        together_model = os.getenv('TOGETHER_MODEL', 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo')
+        if together_key:
+            print(f"🌐 Together AI: ✅ API Key configured")
+        else:
+            print(f"🌐 Together AI: ❌ TOGETHER_API_KEY missing")
+            print("   Please set your Together AI API key in the .env file")
+        print(f"📦 Together AI Model: {together_model}")
     
     # Check Pinecone configuration
     pinecone_key = os.getenv('PINECONE_API_KEY')
